@@ -180,7 +180,7 @@ namespace dense
 		return P;
 	}
 
-	Eigen::VectorXd pagerank(const Eigen::Matrix2Xi64& al)
+	std::map<double, int64_t> pagerank(const Eigen::Matrix2Xi64& al, const double t)
 	{
 		std::cout << "Dense matrix pagerank selected" << std::endl;
 		const auto uids = unique_ids(al);
@@ -188,7 +188,7 @@ namespace dense
 		std::cout << "Number of papers: " << uids.size() << std::endl;
 		auto A = adjacency_matrix(al, uids);
 		std::cout << "Adjacency matrix generated" << std::endl; //\n" << A << std::endl;
-		convert_to_link_matrix(A, 0.15f);
+		convert_to_link_matrix(A, t);
 		std::cout << "Link matrix generated" << std::endl; // \n" << std::endl;
 		const auto P = principal_eigenvector(A);
 		std::map<double, int64_t> pageRanks;
@@ -196,16 +196,10 @@ namespace dense
 		{
 			pageRanks.emplace(P(i), uids(i));
 		}
-		std::cout << "PageRanks:\n" << std::endl;
-		for (auto it = pageRanks.crbegin(); it != pageRanks.crend(); it++)
-		{
-			const auto& rank = *it;
-			std::cout << rank.first << " " << rank.second << std::endl;
-		}
 
 		//M is now of proper form -- iterate to find principal eigenvector
 
-		return {};
+		return pageRanks;
 
 
 	}
@@ -289,23 +283,17 @@ namespace sparse
 		return p;
 	}
 
-	Eigen::VectorXd pagerank(const Eigen::Matrix2Xi64& al)
+	std::map<double, int64_t> pagerank(const Eigen::Matrix2Xi64& al, const double t)
 	{
 		std::cout << "Sparse matrix pagerank selected" << std::endl;
 		const auto uids = unique_ids(al);
 		std::cout << "Number of edges: " << al.cols() << std::endl;
 		std::cout << "Number of papers: " << uids.size() << std::endl;
 
-		double t = 0.15f;
+		//double t = 0.15f;
 		const auto pair = adj_to_link_matrix(adjacency_matrix(al, uids), t);
 		const auto& A = pair.first;
 		const auto& d = pair.second;
-
-		//optimize: don't need a matrix
-		//const auto E = Eigen::MatrixXi::Constant(A.rows(), A.cols(), 1.f / A.rows());
-
-		//optimize A: prescale
-
 
 		const auto P = principal_eigenvector(A, d, t);
 
@@ -314,16 +302,9 @@ namespace sparse
 		{
 			pageRanks.emplace(P(i), uids(i));
 		}
-		std::cout << "PageRanks:\n" << std::endl;
-		for (auto it = pageRanks.crbegin(); it != pageRanks.crend(); it++)
-		{
-			const auto& rank = *it;
-			std::cout << rank.first << " " << rank.second << std::endl;
-		}
-
 		//std::cout << "A:\n" << A << std::endl;
 
-		return {};
+		return pageRanks;
 	}
 }
 
@@ -354,7 +335,7 @@ int __cdecl main(int argc, char*argv[])
 
 	if (argc < 3)
 	{
-		std::cout << "Usage: " << argv[0] << " <association list file> (--dense | --sparse)" << std::endl;
+		std::cout << "Usage: " << argv[0] << " <association list file> (--dense | --sparse) (-t <n>)" << std::endl;
 		return 0;
 	}
 
@@ -362,15 +343,30 @@ int __cdecl main(int argc, char*argv[])
 
 	const ComputationType ctype = parseComputationArg(argv[2]);
 
+	double t = 0.15;
+
+	if (argc == 5)
+	{
+		t = std::stod(argv[4]);
+	}
+
 	const auto al = parse_association_list(path);
+	std::map<double, int64_t> pageRanks;
 
 	if (ctype == ComputationType::Dense)
 	{
-		dense::pagerank(al);
+		pageRanks = dense::pagerank(al, t);
 	}
 	else if (ctype == ComputationType::Sparse)
 	{
-		sparse::pagerank(al);
+		pageRanks = sparse::pagerank(al, t);
+	}
+
+	std::cout << "PageRanks:\n" << std::endl;
+	for (auto it = pageRanks.crbegin(); it != pageRanks.crend(); it++)
+	{
+		const auto& rank = *it;
+		std::cout << rank.first << " " << rank.second << std::endl;
 	}
 
 
