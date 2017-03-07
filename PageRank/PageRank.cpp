@@ -115,10 +115,10 @@ namespace dense
 
 	//Generate adjacency matrix from association list and unique IDs
 	//This is a dense matrix.  If many papers are used, this will *not* scale!
-	Eigen::MatrixXf adjacency_matrix(const Eigen::Matrix2Xi64& al, const Eigen::VectorXi64& uids)
+	Eigen::MatrixXd adjacency_matrix(const Eigen::Matrix2Xi64& al, const Eigen::VectorXi64& uids)
 	{
 		//matrix must only be N x N in size, where N is the number of papers
-		Eigen::MatrixXf A = Eigen::MatrixXf::Zero( uids.size(), uids.size() );
+		Eigen::MatrixXd A = Eigen::MatrixXd::Zero( uids.size(), uids.size() );
 
 		for (Eigen::Index i = 0; i < al.cols(); i++)
 		{
@@ -135,11 +135,11 @@ namespace dense
 	//Divide the contents of each row by the number of outlinks (or the L1 norm)
 	//Fix spider trap in here as well
 	//Second argument is the "teleport" chance for random surfer
-	void convert_to_link_matrix(Eigen::MatrixXf& A, const float t)
+	void convert_to_link_matrix(Eigen::MatrixXd& A, const double t)
 	{
 		const auto C = A.rowwise().sum();
 
-		const auto uniform = 1/static_cast<float>(A.rows());
+		const auto uniform = 1/static_cast<double>(A.rows());
 		const auto uniformT = t*uniform;
 		for (Eigen::Index i = 0; i < A.rows(); i++)
 		{
@@ -158,18 +158,18 @@ namespace dense
 		}
 	}
 
-	Eigen::VectorXf principal_eigenvector(const Eigen::MatrixXf& A)
+	Eigen::VectorXd principal_eigenvector(const Eigen::MatrixXd& A)
 	{
 
 		//Initialize surfer probability starting at paper 1
-		Eigen::RowVectorXf P = Eigen::VectorXf::Zero(A.rows());
+		Eigen::RowVectorXd P = Eigen::VectorXd::Zero(A.rows());
 		P(0) = 1;
-		float diff = 1;
+		double diff = 1;
 
 		int nIterations = 0;
 		while (diff != 0)
 		{
-			Eigen::RowVectorXf PN = P * A;
+			Eigen::RowVectorXd PN = P * A;
 			diff = (PN - P).squaredNorm();
 			P = PN;
 			nIterations++;
@@ -180,7 +180,7 @@ namespace dense
 		return P;
 	}
 
-	Eigen::VectorXf pagerank(const Eigen::Matrix2Xi64& al)
+	Eigen::VectorXd pagerank(const Eigen::Matrix2Xi64& al)
 	{
 		std::cout << "Dense matrix pagerank selected" << std::endl;
 		const auto uids = unique_ids(al);
@@ -191,7 +191,7 @@ namespace dense
 		convert_to_link_matrix(A, 0.15f);
 		std::cout << "Link matrix generated" << std::endl; // \n" << std::endl;
 		const auto P = principal_eigenvector(A);
-		std::map<float, int64_t> pageRanks;
+		std::map<double, int64_t> pageRanks;
 		for (Eigen::Index i = 0; i < P.size(); i++)
 		{
 			pageRanks.emplace(P(i), uids(i));
@@ -216,12 +216,12 @@ namespace sparse
 {
 
 	//Row major matrices used for efficiency: left eigenvalue 
-	Eigen::SparseMatrix<float, Eigen::RowMajor> adjacency_matrix(const Eigen::Matrix2Xi64& al, const Eigen::VectorXi64& uids)
+	Eigen::SparseMatrix<double, Eigen::RowMajor> adjacency_matrix(const Eigen::Matrix2Xi64& al, const Eigen::VectorXi64& uids)
 	{
-		Eigen::SparseMatrix<float, Eigen::RowMajor> A{ uids.size(), uids.size() };
-		Eigen::SparseVector<float> C{ uids.size() };
+		Eigen::SparseMatrix<double, Eigen::RowMajor> A{ uids.size(), uids.size() };
+		Eigen::SparseVector<double> C{ uids.size() };
 
-		std::vector<Eigen::Triplet<float>> triplets;
+		std::vector<Eigen::Triplet<double>> triplets;
 		for (Eigen::Index i = 0; i < al.cols(); i++)
 		{
 			const auto paper1 = al(0, i);
@@ -236,10 +236,10 @@ namespace sparse
 	}
 
 	//Switch to column major matrices for computing left eigenvector (test)
-	std::pair<Eigen::SparseMatrix<float>, Eigen::VectorXf> adj_to_link_matrix(Eigen::SparseMatrix<float, Eigen::RowMajor>&& A, const float t)
+	std::pair<Eigen::SparseMatrix<double>, Eigen::VectorXd> adj_to_link_matrix(Eigen::SparseMatrix<double, Eigen::RowMajor>&& A, const double t)
 	{
 		//Also return a dense vector d that element i is 1 if row i is all zeros and 0 otherwise
-		Eigen::VectorXf d = Eigen::VectorXf::Zero(A.rows());
+		Eigen::VectorXd d = Eigen::VectorXd::Zero(A.rows());
 		
 		for (Eigen::Index i = 0; i < A.rows(); i++)
 		{
@@ -253,13 +253,13 @@ namespace sparse
 			}
 		}
 
-		return { Eigen::SparseMatrix<float> { A*(1-t) }, d };
+		return { Eigen::SparseMatrix<double> { A*(1-t) }, d };
 	}
 
-	Eigen::RowVectorXf principal_eigenvector(const Eigen::SparseMatrix<float>& A, const Eigen::VectorXf& d, const float t)
+	Eigen::RowVectorXd principal_eigenvector(const Eigen::SparseMatrix<double>& A, const Eigen::VectorXd& d, const double t)
 	{
 		const auto n = A.rows();
-		const auto teT_n = Eigen::RowVectorXf::Constant(n, (1-t) / n);
+		const auto teT_n = Eigen::RowVectorXd::Constant(n, (1-t) / n);
 
 		//const auto tE = Eigen::MatrixXf::Constant(n, n, t / n);
 		const auto t_n = t / n;
@@ -271,14 +271,14 @@ namespace sparse
 		//D = deT/n
 		//n = A.rows()
 
-		Eigen::RowVectorXf p = Eigen::RowVectorXf::Zero(n);
+		Eigen::RowVectorXd p = Eigen::RowVectorXd::Zero(n);
 		p(0) = 1;
 
-		float dist = 1;
+		double dist = 1;
 		int nIterations = 0;
 		while (dist != 0)
 		{
-			Eigen::RowVectorXf p2 = p * A + ((p*d)*(teT_n).array() + p.sum()*(t_n)).matrix();
+			Eigen::RowVectorXd p2 = p * A + ((p*d)*(teT_n).array() + p.sum()*(t_n)).matrix();
 			dist = (p2 - p).squaredNorm();
 			nIterations++;
 			p = p2;
@@ -289,14 +289,14 @@ namespace sparse
 		return p;
 	}
 
-	Eigen::VectorXf pagerank(const Eigen::Matrix2Xi64& al)
+	Eigen::VectorXd pagerank(const Eigen::Matrix2Xi64& al)
 	{
 		std::cout << "Sparse matrix pagerank selected" << std::endl;
 		const auto uids = unique_ids(al);
 		std::cout << "Number of edges: " << al.cols() << std::endl;
 		std::cout << "Number of papers: " << uids.size() << std::endl;
 
-		float t = 0.15f;
+		double t = 0.15f;
 		const auto pair = adj_to_link_matrix(adjacency_matrix(al, uids), t);
 		const auto& A = pair.first;
 		const auto& d = pair.second;
@@ -309,7 +309,7 @@ namespace sparse
 
 		const auto P = principal_eigenvector(A, d, t);
 
-		std::map<float, int64_t> pageRanks;
+		std::map<double, int64_t> pageRanks;
 		for (Eigen::Index i = 0; i < P.size(); i++)
 		{
 			pageRanks.emplace(P(i), uids(i));
