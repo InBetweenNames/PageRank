@@ -56,61 +56,63 @@ Eigen::Matrix2Xi64 parse_association_list(const std::string& al_path)
 	return al;
 }
 
+//Generate a vector of unique IDs for each paper
+//The position of the paper in this vector is its unique ID
+//This is used to map rows and columns of the M matrix, since the paper IDs are not contiguous and do not start from 0
+//returned vector is sorted in ascending order
+Eigen::VectorXi64 unique_ids(const Eigen::Matrix2Xi64& al)
+{
+	std::set<int64_t> uids;
+
+	for (Eigen::Index i = 0; i < al.cols(); i++)
+	{
+		uids.emplace(al(0, i));
+		uids.emplace(al(1, i));
+	}
+
+	Eigen::VectorXi64 uid_vector{ static_cast<Eigen::Index>(uids.size()) };
+
+	Eigen::Index index = 0;
+	for (const auto i : uids)
+	{
+		uid_vector(index) = i;
+		index++;
+	}
+
+	return uid_vector;
+}
+
+Eigen::Index paperid_to_uid(const Eigen::VectorXi64& uids, int64_t paper)
+{
+	//Take advantage of sorted vector -- do binary search
+	const auto n = uids.size();
+	bool found = false;
+	Eigen::Index lowerBound = 0;
+	Eigen::Index upperBound = n - 1;
+
+	Eigen::Index midpoint = 0;
+
+	do {
+		midpoint = (lowerBound + upperBound) / 2;
+		if (uids(midpoint) < paper)
+		{
+			//Take second half
+			lowerBound = midpoint + 1;
+		}
+		else if (paper < uids(midpoint))
+		{
+			//Take first half
+			upperBound = midpoint - 1;
+		}
+
+	} while (uids(midpoint) != paper);
+
+	return midpoint;
+}
+
+
 namespace dense
 {
-	//Generate a vector of unique IDs for each paper
-	//The position of the paper in this vector is its unique ID
-	//This is used to map rows and columns of the M matrix, since the paper IDs are not contiguous and do not start from 0
-	//returned vector is sorted in ascending order
-	Eigen::VectorXi64 unique_ids(const Eigen::Matrix2Xi64& al)
-	{
-		std::set<int64_t> uids;
-
-		for (Eigen::Index i = 0; i < al.cols(); i++)
-		{
-			uids.emplace(al(0, i));
-			uids.emplace(al(1, i));
-		}
-
-		Eigen::VectorXi64 uid_vector{ static_cast<Eigen::Index>(uids.size()) };
-
-		Eigen::Index index = 0;
-		for (const auto i : uids)
-		{
-			uid_vector(index) = i;
-			index++;
-		}
-
-		return uid_vector;
-	}
-
-	Eigen::Index paperid_to_uid(const Eigen::VectorXi64& uids, int64_t paper)
-	{
-		//Take advantage of sorted vector -- do binary search
-		const auto n = uids.size();
-		bool found = false;
-		Eigen::Index lowerBound = 0;
-		Eigen::Index upperBound = n-1;
-		
-		Eigen::Index midpoint = 0;
-
-		do {
-			midpoint = (lowerBound + upperBound) / 2;
-			if (uids(midpoint) < paper)
-			{
-				//Take second half
-				lowerBound = midpoint + 1;
-			}
-			else if (paper < uids(midpoint))
-			{
-				//Take first half
-				upperBound = midpoint - 1;
-			}
-
-		} while (uids(midpoint) != paper);
-
-		return midpoint;
-	}
 
 	//Generate adjacency matrix from association list and unique IDs
 	//This is a dense matrix.  If many papers are used, this will *not* scale!
@@ -211,6 +213,75 @@ namespace dense
 
 }
 
+namespace sparse
+{
+
+	//Row major matrices used for efficiency: left eigenvalue 
+	Eigen::SparseMatrix<float, Eigen::RowMajor> adjacency_matrix(const Eigen::Matrix2Xi64& al, const Eigen::VectorXi64& uids)
+	{
+		Eigen::SparseMatrix<float, Eigen::RowMajor> A{ uids.size(), uids.size() };
+		Eigen::SparseVector<float> C{ uids.size() };
+
+		std::vector<Eigen::Triplet<float>> triplets;
+		for (Eigen::Index i = 0; i < al.cols(); i++)
+		{
+			const auto paper1 = al(0, i);
+			const auto paper2 = al(1, i);
+			triplets.emplace_back(paperid_to_uid(uids, paper1), paperid_to_uid(uids, paper2), 1);
+		}
+
+
+		A.setFromTriplets(triplets.begin(), triplets.end());
+
+		return A;
+	}
+
+	//Switch to column major matrices for computing left eigenvector (test)
+	std::pair<Eigen::SparseMatrix<float>, Eigen::VectorXi> adj_to_link_matrix(Eigen::SparseMatrix<float, Eigen::RowMajor>&& A)
+	{
+		//Also return a dense vector d that element i is 1 if row i is all zeros and 0 otherwise
+		Eigen::VectorXi d = Eigen::VectorXi::Zero(A.rows());
+		
+		for (Eigen::Index i = 0; i < A.rows(); i++)
+		{
+			const auto Ci = A.row(i).nonZeros();
+			if (Ci > 0)
+			{
+				A.row(i) /= Ci;
+			}
+			else {
+				d(i) = 1;
+			}
+		}
+
+		return { Eigen::SparseMatrix<float> { A }, d };
+	}
+
+	Eigen::VectorXf pagerank(const Eigen::Matrix2Xi64& al)
+	{
+		std::cout << "Sparse matrix pagerank selected" << std::endl;
+		const auto uids = unique_ids(al);
+		std::cout << "Number of edges: " << al.cols() << std::endl;
+		std::cout << "Number of papers: " << uids.size() << std::endl;
+		const auto pair = adj_to_link_matrix(adjacency_matrix(al, uids));
+		const auto& A = pair.first;
+		const auto& d = pair.second;
+		const auto eT_n = Eigen::RowVectorXi::Constant(A.rows(), 1.f/A.rows());
+
+		//D = deT/n
+
+		//optimize: don't need a matrix
+		const auto E = Eigen::MatrixXi::Constant(A.rows(), A.cols(), 1.f / A.rows());
+
+		//optimize A: prescale
+		//M = tE + (1 - t)D + (1 - t)A
+
+		//std::cout << "A:\n" << A << std::endl;
+
+		return {};
+	}
+}
+
 enum class ComputationType
 {
 	Sparse, Dense
@@ -254,7 +325,7 @@ int __cdecl main(int argc, char*argv[])
 	}
 	else if (ctype == ComputationType::Sparse)
 	{
-		throw std::runtime_error{ "sparce matrices not supported yet" };
+		sparse::pagerank(al);
 	}
 
 
