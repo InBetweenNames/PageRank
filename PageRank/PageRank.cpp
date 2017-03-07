@@ -362,11 +362,17 @@ int __cdecl main(int argc, char*argv[])
 		pageRanks = sparse::pagerank(al, t);
 	}
 
-	std::cout << "PageRanks:\n" << std::endl;
+	std::string output_file = path;
+	output_file.append(".ranks");
+
+	std::ofstream rankFile{ output_file };
+
+	//std::cout << "PageRanks:\n" << std::endl;
 	for (auto it = pageRanks.crbegin(); it != pageRanks.crend(); it++)
 	{
 		const auto& rank = *it;
-		std::cout << rank.first << " " << rank.second << std::endl;
+		//std::cout << rank.first << " " << rank.second << std::endl;
+		rankFile << rank.first << " " << rank.second << std::endl;
 	}
 
 
