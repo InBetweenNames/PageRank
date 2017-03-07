@@ -180,7 +180,7 @@ namespace dense
 		return P;
 	}
 
-	std::map<double, int64_t> pagerank(const Eigen::Matrix2Xi64& al, const double t)
+	std::multimap<double, int64_t> pagerank(const Eigen::Matrix2Xi64& al, const double t)
 	{
 		std::cout << "Dense matrix pagerank selected" << std::endl;
 		const auto uids = unique_ids(al);
@@ -191,7 +191,7 @@ namespace dense
 		convert_to_link_matrix(A, t);
 		std::cout << "Link matrix generated" << std::endl; // \n" << std::endl;
 		const auto P = principal_eigenvector(A);
-		std::map<double, int64_t> pageRanks;
+		std::multimap<double, int64_t> pageRanks;
 		for (Eigen::Index i = 0; i < P.size(); i++)
 		{
 			pageRanks.emplace(P(i), uids(i));
@@ -283,7 +283,7 @@ namespace sparse
 		return p;
 	}
 
-	std::map<double, int64_t> pagerank(const Eigen::Matrix2Xi64& al, const double t)
+	std::multimap<double, int64_t> pagerank(const Eigen::Matrix2Xi64& al, const double t)
 	{
 		std::cout << "Sparse matrix pagerank selected" << std::endl;
 		const auto uids = unique_ids(al);
@@ -297,7 +297,7 @@ namespace sparse
 
 		const auto P = principal_eigenvector(A, d, t);
 
-		std::map<double, int64_t> pageRanks;
+		std::multimap<double, int64_t> pageRanks;
 		for (Eigen::Index i = 0; i < P.size(); i++)
 		{
 			pageRanks.emplace(P(i), uids(i));
@@ -351,7 +351,7 @@ int __cdecl main(int argc, char*argv[])
 	}
 
 	const auto al = parse_association_list(path);
-	std::map<double, int64_t> pageRanks;
+	std::multimap<double, int64_t> pageRanks;
 
 	if (ctype == ComputationType::Dense)
 	{
