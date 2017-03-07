@@ -86,7 +86,6 @@ Eigen::Index paperid_to_uid(const Eigen::VectorXi64& uids, int64_t paper)
 {
 	//Take advantage of sorted vector -- do binary search
 	const auto n = uids.size();
-	bool found = false;
 	Eigen::Index lowerBound = 0;
 	Eigen::Index upperBound = n - 1;
 
@@ -189,7 +188,7 @@ namespace dense
 		std::cout << "Number of papers: " << uids.size() << std::endl;
 		auto A = adjacency_matrix(al, uids);
 		std::cout << "Adjacency matrix generated" << std::endl; //\n" << A << std::endl;
-		convert_to_link_matrix(A, 0.15);
+		convert_to_link_matrix(A, 0.15f);
 		std::cout << "Link matrix generated" << std::endl; // \n" << std::endl;
 		const auto P = principal_eigenvector(A);
 		std::map<float, int64_t> pageRanks;
@@ -237,10 +236,10 @@ namespace sparse
 	}
 
 	//Switch to column major matrices for computing left eigenvector (test)
-	std::pair<Eigen::SparseMatrix<float>, Eigen::VectorXi> adj_to_link_matrix(Eigen::SparseMatrix<float, Eigen::RowMajor>&& A)
+	std::pair<Eigen::SparseMatrix<float>, Eigen::VectorXf> adj_to_link_matrix(Eigen::SparseMatrix<float, Eigen::RowMajor>&& A, const float t)
 	{
 		//Also return a dense vector d that element i is 1 if row i is all zeros and 0 otherwise
-		Eigen::VectorXi d = Eigen::VectorXi::Zero(A.rows());
+		Eigen::VectorXf d = Eigen::VectorXf::Zero(A.rows());
 		
 		for (Eigen::Index i = 0; i < A.rows(); i++)
 		{
@@ -254,7 +253,40 @@ namespace sparse
 			}
 		}
 
-		return { Eigen::SparseMatrix<float> { A }, d };
+		return { Eigen::SparseMatrix<float> { A*(1-t) }, d };
+	}
+
+	Eigen::RowVectorXf principal_eigenvector(const Eigen::SparseMatrix<float>& A, const Eigen::VectorXf& d, const float t)
+	{
+		const auto n = A.rows();
+		const auto teT_n = Eigen::RowVectorXf::Constant(n, (1-t) / n);
+
+		//const auto tE = Eigen::MatrixXf::Constant(n, n, t / n);
+		const auto t_n = t / n;
+
+		//M = tE + (1 - t)D + (1 - t)A
+		//A is prescaled
+
+		//E = uniform(1/n)
+		//D = deT/n
+		//n = A.rows()
+
+		Eigen::RowVectorXf p = Eigen::RowVectorXf::Zero(n);
+		p(0) = 1;
+
+		float dist = 1;
+		int nIterations = 0;
+		while (dist != 0)
+		{
+			Eigen::RowVectorXf p2 = p * A + ((p*d)*(teT_n).array() + p.sum()*(t_n)).matrix();
+			dist = (p2 - p).squaredNorm();
+			nIterations++;
+			p = p2;
+		}
+
+		std::cout << "Convergence after " << nIterations << " iterations" << std::endl;
+
+		return p;
 	}
 
 	Eigen::VectorXf pagerank(const Eigen::Matrix2Xi64& al)
@@ -263,18 +295,31 @@ namespace sparse
 		const auto uids = unique_ids(al);
 		std::cout << "Number of edges: " << al.cols() << std::endl;
 		std::cout << "Number of papers: " << uids.size() << std::endl;
-		const auto pair = adj_to_link_matrix(adjacency_matrix(al, uids));
+
+		float t = 0.15f;
+		const auto pair = adj_to_link_matrix(adjacency_matrix(al, uids), t);
 		const auto& A = pair.first;
 		const auto& d = pair.second;
-		const auto eT_n = Eigen::RowVectorXi::Constant(A.rows(), 1.f/A.rows());
-
-		//D = deT/n
 
 		//optimize: don't need a matrix
-		const auto E = Eigen::MatrixXi::Constant(A.rows(), A.cols(), 1.f / A.rows());
+		//const auto E = Eigen::MatrixXi::Constant(A.rows(), A.cols(), 1.f / A.rows());
 
 		//optimize A: prescale
-		//M = tE + (1 - t)D + (1 - t)A
+
+
+		const auto P = principal_eigenvector(A, d, t);
+
+		std::map<float, int64_t> pageRanks;
+		for (Eigen::Index i = 0; i < P.size(); i++)
+		{
+			pageRanks.emplace(P(i), uids(i));
+		}
+		std::cout << "PageRanks:\n" << std::endl;
+		for (auto it = pageRanks.crbegin(); it != pageRanks.crend(); it++)
+		{
+			const auto& rank = *it;
+			std::cout << rank.first << " " << rank.second << std::endl;
+		}
 
 		//std::cout << "A:\n" << A << std::endl;
 
