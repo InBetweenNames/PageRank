@@ -13,6 +13,10 @@
 #include <set>
 #include <string>
 
+#ifdef _WIN32
+#define CDECL __cdecl
+#endif
+
 namespace Eigen
 {
 	using Matrix2Xi64 = Matrix<int64_t, 2, -1>;
@@ -330,7 +334,7 @@ ComputationType parseComputationArg(const std::string& arg)
 	}
 }
 
-int __cdecl main(int argc, char*argv[])
+int CDECL main(int argc, char*argv[])
 {
 
 	if (argc < 3)
@@ -353,16 +357,18 @@ int __cdecl main(int argc, char*argv[])
 	const auto al = parse_association_list(path);
 	std::multimap<double, int64_t> pageRanks;
 
+	std::string output_file = path;
 	if (ctype == ComputationType::Dense)
 	{
 		pageRanks = dense::pagerank(al, t);
+		output_file.append(".dense");
 	}
 	else if (ctype == ComputationType::Sparse)
 	{
 		pageRanks = sparse::pagerank(al, t);
+		output_file.append(".sparse");
 	}
 
-	std::string output_file = path;
 	output_file.append(".ranks");
 
 	std::ofstream rankFile{ output_file };
